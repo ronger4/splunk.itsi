@@ -211,21 +211,34 @@ def main():
     if not getattr(module, "_socket_path", None):
         module.fail_json(msg="Use ansible_connection=httpapi and ansible_network_os=splunk.itsi.itsi_api_client")
 
-    client = ItsiRequest(Connection(module._socket_path), module)
+    try:
+        client = ItsiRequest(Connection(module._socket_path), module)
+    except Exception as e:
+        module.fail_json(msg=f"Failed to establish connection: {e}")
+
     policy_id = module.params.get("policy_id")
     title = module.params.get("title")
     fields = module.params.get("fields")
 
     result: dict = {"changed": False, "response": {}}
 
-    if policy_id:
-        result["response"] = _query_by_policy_id(client, policy_id, fields)
-    elif title:
-        result["response"] = _query_by_title(client, title, fields)
-    else:
-        result["response"] = _list_all_policies(client, fields, module.params.get("filter_data"), module.params.get("limit"))
+    try:
+        if policy_id:
+            result["response"] = _query_by_policy_id(client, policy_id, fields)
+        elif title:
+            result["response"] = _query_by_title(client, title, fields)
+        else:
+            result["response"] = _list_all_policies(
+                client,
+                fields,
+                module.params.get("filter_data"),
+                module.params.get("limit"),
+            )
 
-    module.exit_json(**result)
+        module.exit_json(**result)
+
+    except Exception as e:
+        module.fail_json(msg=f"Exception occurred: {str(e)}")
 
 
 if __name__ == "__main__":

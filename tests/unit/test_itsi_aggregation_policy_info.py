@@ -736,8 +736,10 @@ class TestMain:
 
         mock_connection.side_effect = Exception("Connection failed")
 
-        with pytest.raises(Exception, match="Connection failed"):
+        with pytest.raises(AnsibleFailJson):
             main()
+
+        assert "Failed to establish connection" in mock_module.fail_json.call_args[1]["msg"]
 
     @patch("ansible_collections.splunk.itsi.plugins.modules.itsi_aggregation_policy_info.Connection")
     @patch("ansible_collections.splunk.itsi.plugins.modules.itsi_aggregation_policy_info.AnsibleModule")

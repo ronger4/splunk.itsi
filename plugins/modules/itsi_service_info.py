@@ -224,7 +224,11 @@ def main() -> None:
             msg="Use ansible_connection=httpapi and ansible_network_os=splunk.itsi.itsi_api_client",
         )
 
-    client = ItsiRequest(Connection(module._socket_path), module)
+    try:
+        client = ItsiRequest(Connection(module._socket_path), module)
+    except Exception as e:
+        module.fail_json(msg=f"Failed to establish connection: {e}")
+
     module_params = module.params
 
     result: Dict[str, Any] = {
@@ -232,18 +236,22 @@ def main() -> None:
         "response": {},
     }
 
-    if module_params.get("service_id"):
-        result["response"] = _handle_get_by_id(client, module_params["service_id"])
+    try:
+        if module_params.get("service_id"):
+            result["response"] = _handle_get_by_id(client, module_params["service_id"])
+            module.exit_json(**result)
+
+        params = _build_list_params(module_params)
+        api_result = client.get(BASE, params=params)
+        if api_result is None:
+            module.exit_json(**result)
+        _status, _headers, body = api_result
+        result["response"] = body
+
         module.exit_json(**result)
 
-    params = _build_list_params(module_params)
-    api_result = client.get(BASE, params=params)
-    if api_result is None:
-        module.exit_json(**result)
-    _status, _headers, body = api_result
-    result["response"] = body
-
-    module.exit_json(**result)
+    except Exception as e:
+        module.fail_json(msg=f"Exception occurred: {str(e)}")
 
 
 if __name__ == "__main__":

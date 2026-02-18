@@ -783,7 +783,7 @@ class TestMain:
             main()
 
         mock_module.fail_json.assert_called_once()
-        assert "Exception occurred" in mock_module.fail_json.call_args[1]["msg"]
+        assert "Failed to establish connection" in mock_module.fail_json.call_args[1]["msg"]
 
     @patch(f"{MODULE_PATH}._list_episodes", side_effect=Exception("Timeout"))
     @patch(f"{MODULE_PATH}.Connection")

@@ -181,16 +181,24 @@ def main():
     if not getattr(module, "_socket_path", None):
         module.fail_json(msg="Use ansible_connection=httpapi and ansible_network_os=splunk.itsi.itsi_api_client")
 
-    client = ItsiRequest(Connection(module._socket_path), module)
+    try:
+        client = ItsiRequest(Connection(module._socket_path), module)
+    except Exception as e:
+        module.fail_json(msg=f"Failed to establish connection: {e}")
+
     result: dict = {"changed": False, "response": {}}
 
-    search_identifier = module.params.get("correlation_search_id") or module.params.get("name")
-    if search_identifier:
-        result["response"] = _query_single_search(client, module.params)
-    else:
-        result["response"] = _query_all_searches(client, module.params)
+    try:
+        search_identifier = module.params.get("correlation_search_id") or module.params.get("name")
+        if search_identifier:
+            result["response"] = _query_single_search(client, module.params)
+        else:
+            result["response"] = _query_all_searches(client, module.params)
 
-    module.exit_json(**result)
+        module.exit_json(**result)
+
+    except Exception as e:
+        module.fail_json(msg=f"Exception occurred: {str(e)}")
 
 
 if __name__ == "__main__":

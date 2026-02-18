@@ -195,6 +195,7 @@ from ansible_collections.splunk.itsi.plugins.module_utils.episode_details import
     get_episode_by_id,
 )
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 # Named parameters that map directly to episode fields
 NAMED_FIELD_PARAMS = ("severity", "status", "owner", "instruction")
@@ -278,7 +279,12 @@ def main() -> None:
 
     try:
         client = ItsiRequest(Connection(module._socket_path), module)
+    except Exception as e:
+        module.fail_json(msg=f"Failed to establish connection: {e}")
 
+    extra = {"episode_id": episode_id}
+
+    try:
         # Fetch current episode state
         current_episode = get_episode_by_id(client, episode_id)
         if current_episode is None:
@@ -293,37 +299,38 @@ def main() -> None:
 
         # Remove None values from desired state so we only compare real values
         want_conf: dict = utils.remove_empties(update_data)
-
-        # Compute the diff -- keys in want_conf whose values differ from have_conf
         diff: dict = utils.dict_diff(have_conf, want_conf)
 
         # Build the "after" snapshot (current state merged with desired changes)
         after_conf: dict = dict(have_conf)
         after_conf.update(want_conf)
 
-        # Build result dict with common keys
-        result: dict[str, Any] = {
-            "episode_id": episode_id,
-            "before": have_conf,
-            "after": after_conf,
-            "diff": diff,
-            "response": {},
-        }
-
         # No changes needed
         if not diff:
-            result.update(changed=False, after=have_conf, diff={})
-            module.exit_json(**result)
+            exit_with_result(module, before=have_conf, after=have_conf, extra=extra)
 
         # Check mode -- report what would change without calling the API
         if module.check_mode:
-            result["changed"] = True
-            module.exit_json(**result)
+            exit_with_result(
+                module,
+                changed=True,
+                before=have_conf,
+                after=after_conf,
+                diff=diff,
+                extra=extra,
+            )
 
         # Apply the update
         response = _update_episode(client, episode_id, update_data)
-        result.update(changed=True, response=response)
-        module.exit_json(**result)
+        exit_with_result(
+            module,
+            changed=True,
+            before=have_conf,
+            after=after_conf,
+            diff=diff,
+            response=response,
+            extra=extra,
+        )
 
     except Exception as e:
         module.fail_json(

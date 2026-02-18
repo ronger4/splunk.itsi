@@ -1,0 +1,251 @@
+---
+- name: START itsi_glass_table integration tests
+  ansible.builtin.debug:
+    msg: "START itsi_glass_table integration tests on connection={{ ansible_connection }}"
+
+- block:
+    # -- Check mode create --
+    - name: "Check mode: create glass table (dry run)"
+      splunk.itsi.itsi_glass_table: &create_params
+        title: "{{ test_glass_table_title }}"
+        description: "{{ test_glass_table.description }}"
+        definition: "{{ test_glass_table.definition }}"
+        state: present
+      check_mode: true
+      register: check_create
+
+    - name: Assert check mode create reports changed
+      ansible.builtin.assert:
+        that:
+          - check_create.changed == true
+
+    - name: Verify glass table was NOT created (info module)
+      splunk.itsi.itsi_glass_table_info:
+        filter: '{"title": "{{ test_glass_table_title }}"}'
+      register: info_after_check_create
+
+    - name: Assert nothing was created in check mode
+      ansible.builtin.assert:
+        that:
+          - info_after_check_create.glass_tables | length == 0
+
+    # -- Create --
+    - name: Create glass table
+      splunk.itsi.itsi_glass_table: *create_params
+      register: create_result
+
+    - name: Assert create succeeded
+      ansible.builtin.assert:
+        that:
+          - create_result.changed == true
+          - create_result.response._key is defined
+          - create_result.after.title == test_glass_table_title
+
+    - name: Store glass table ID
+      ansible.builtin.set_fact:
+        test_glass_table_id: "{{ create_result.response._key }}"
+
+    # -- Verify create via info module --
+    - name: Fetch created glass table by ID (info module)
+      splunk.itsi.itsi_glass_table_info:
+        glass_table_id: "{{ test_glass_table_id }}"
+      register: info_by_id
+
+    - name: Assert info by ID returns the glass table
+      ansible.builtin.assert:
+        that:
+          - info_by_id.changed == false
+          - info_by_id.glass_tables | length == 1
+          - info_by_id.glass_tables[0]._key == test_glass_table_id
+          - info_by_id.glass_tables[0].title == test_glass_table_title
+
+    # -- Create idempotency (update with same values) --
+    - name: Update with same values (idempotency)
+      splunk.itsi.itsi_glass_table:
+        <<: *create_params
+        glass_table_id: "{{ test_glass_table_id }}"
+      register: idempotent_result
+
+    - name: Assert no changes on idempotent run
+      ansible.builtin.assert:
+        that:
+          - idempotent_result.changed == false
+
+    # -- Check mode update --
+    - name: "Check mode: update description (dry run)"
+      splunk.itsi.itsi_glass_table: &update_params
+        glass_table_id: "{{ test_glass_table_id }}"
+        description: "{{ test_glass_table_updated_description }}"
+        state: present
+      check_mode: true
+      register: check_update
+
+    - name: Assert check mode update reports changed
+      ansible.builtin.assert:
+        that:
+          - check_update.changed == true
+          - check_update.diff.description is defined
+
+    - name: Verify description NOT changed after check mode (info module)
+      splunk.itsi.itsi_glass_table_info:
+        glass_table_id: "{{ test_glass_table_id }}"
+      register: info_after_check_update
+
+    - name: Assert original description still in place
+      ansible.builtin.assert:
+        that:
+          - info_after_check_update.glass_tables[0].description == test_glass_table.description
+
+    # -- Update --
+    - name: Update description
+      splunk.itsi.itsi_glass_table: *update_params
+      register: update_result
+
+    - name: Assert update succeeded
+      ansible.builtin.assert:
+        that:
+          - update_result.changed == true
+          - update_result.diff.description is defined
+
+    - name: Verify update via info module
+      splunk.itsi.itsi_glass_table_info:
+        glass_table_id: "{{ test_glass_table_id }}"
+      register: info_after_update
+
+    - name: Assert description was updated
+      ansible.builtin.assert:
+        that:
+          - info_after_update.glass_tables[0].description == test_glass_table_updated_description
+
+    # -- Update idempotency --
+    - name: Update description again with same value (idempotency)
+      splunk.itsi.itsi_glass_table: *update_params
+      register: update_idempotent
+
+    - name: Assert no changes on second update
+      ansible.builtin.assert:
+        that:
+          - update_idempotent.changed == false
+
+    # -- Info module: list all --
+    - name: List all glass tables (info module)
+      splunk.itsi.itsi_glass_table_info:
+      register: info_all
+
+    - name: Assert list returns at least our test table
+      ansible.builtin.assert:
+        that:
+          - info_all.changed == false
+          - info_all.glass_tables | length >= 1
+
+    # -- Info module: pagination --
+    - name: List glass tables with count=1 (info module)
+      splunk.itsi.itsi_glass_table_info:
+        count: 1
+      register: info_paginated
+
+    - name: Assert pagination limits results
+      ansible.builtin.assert:
+        that:
+          - info_paginated.glass_tables | length <= 1
+
+    # -- Info module: field projection --
+    - name: Fetch with fields projection (info module)
+      splunk.itsi.itsi_glass_table_info:
+        glass_table_id: "{{ test_glass_table_id }}"
+        fields: "_key,title"
+      register: info_fields
+
+    - name: Assert field projection returns data
+      ansible.builtin.assert:
+        that:
+          - info_fields.glass_tables | length == 1
+          - info_fields.glass_tables[0]._key == test_glass_table_id
+
+    # -- Info module: non-existent ID --
+    - name: Fetch non-existent glass table (info module)
+      splunk.itsi.itsi_glass_table_info:
+        glass_table_id: "nonexistent_id_12345"
+      register: info_missing
+
+    - name: Assert non-existent returns empty list
+      ansible.builtin.assert:
+        that:
+          - info_missing.changed == false
+          - info_missing.glass_tables | length == 0
+
+    # -- Check mode delete --
+    - name: "Check mode: delete glass table (dry run)"
+      splunk.itsi.itsi_glass_table: &delete_params
+        glass_table_id: "{{ test_glass_table_id }}"
+        state: absent
+      check_mode: true
+      register: check_delete
+
+    - name: Assert check mode delete reports changed
+      ansible.builtin.assert:
+        that:
+          - check_delete.changed == true
+
+    - name: Verify glass table still exists after check mode delete (info module)
+      splunk.itsi.itsi_glass_table_info:
+        glass_table_id: "{{ test_glass_table_id }}"
+      register: info_after_check_delete
+
+    - name: Assert glass table was not deleted in check mode
+      ansible.builtin.assert:
+        that:
+          - info_after_check_delete.glass_tables | length == 1
+
+    # -- Delete --
+    - name: Delete glass table
+      splunk.itsi.itsi_glass_table: *delete_params
+      register: delete_result
+
+    - name: Assert delete succeeded
+      ansible.builtin.assert:
+        that:
+          - delete_result.changed == true
+
+    - name: Verify glass table is gone (info module)
+      splunk.itsi.itsi_glass_table_info:
+        glass_table_id: "{{ test_glass_table_id }}"
+      register: info_after_delete
+
+    - name: Assert glass table no longer exists
+      ansible.builtin.assert:
+        that:
+          - info_after_delete.glass_tables | length == 0
+
+    # -- Delete idempotency --
+    - name: Delete again (idempotency)
+      splunk.itsi.itsi_glass_table: *delete_params
+      register: delete_idempotent
+
+    - name: Assert no changes on second delete
+      ansible.builtin.assert:
+        that:
+          - delete_idempotent.changed == false
+
+    # -- Error handling: update non-existent --
+    - name: Attempt update on non-existent glass table
+      splunk.itsi.itsi_glass_table:
+        glass_table_id: "nonexistent_id_12345"
+        title: "Should fail"
+        state: present
+      register: update_missing
+      ignore_errors: true
+
+    - name: Assert update of non-existent fails
+      ansible.builtin.assert:
+        that:
+          - update_missing is failed
+          - "'not found' in update_missing.msg"
+
+    - name: All itsi_glass_table integration tests passed
+      ansible.builtin.debug:
+        msg: "All itsi_glass_table and itsi_glass_table_info integration tests completed."
+
+  always:
+    - name: Final cleanup
+      ansible.builtin.include_tasks: _remove_config.yaml

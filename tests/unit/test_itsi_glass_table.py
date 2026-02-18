@@ -1,0 +1,394 @@
+# -*- coding: utf-8 -*-
+# GNU General Public License v3.0+ (see COPYING or https://www.gnu.org/licenses/gpl-3.0.txt)
+# Copyright (c) 2026 Splunk ITSI Ansible Collection maintainers
+"""Unit tests for itsi_glass_table module."""
+
+
+import json
+from unittest.mock import MagicMock, patch
+
+import pytest
+from ansible_collections.splunk.itsi.plugins.modules.itsi_glass_table import (
+    _build_create_payload,
+    _build_desired,
+    main,
+)
+from conftest import AnsibleExitJson, AnsibleFailJson, make_mock_conn
+
+MODULE_PATH = "ansible_collections.splunk.itsi.plugins.modules.itsi_glass_table"
+
+SAMPLE_DEFINITION = {"title": "My GT", "description": "desc", "layout": {"tabs": []}}
+
+SAMPLE_GT_API = {
+    "_key": "abc123",
+    "title": "My GT",
+    "description": "desc",
+    "definition": SAMPLE_DEFINITION,
+    "acl": {"sharing": "user"},
+    "gt_version": "beta",
+    "_owner": "nobody",
+}
+
+# Default module params for present state
+DEFAULT_PRESENT_PARAMS = {
+    "glass_table_id": None,
+    "title": None,
+    "description": None,
+    "definition": None,
+    "sharing": None,
+    "state": "present",
+}
+
+
+def _make_main_module(params, conn_body="{}", conn_status=200):
+    """Build mock module + connection for main() tests."""
+    mock_module = MagicMock()
+    mock_module._socket_path = "/tmp/socket"
+    mock_module.params = {**DEFAULT_PRESENT_PARAMS, **params}
+    mock_module.check_mode = False
+    mock_module.fail_json.side_effect = AnsibleFailJson
+    mock_module.exit_json.side_effect = AnsibleExitJson
+    mock_conn = make_mock_conn(conn_status, conn_body)
+    return mock_module, mock_conn
+
+
+# -- _build_desired --
+
+
+class TestBuildDesired:
+    def test_all_none_returns_empty(self):
+        assert _build_desired(DEFAULT_PRESENT_PARAMS) == {}
+
+    def test_includes_non_none_fields(self):
+        params = {**DEFAULT_PRESENT_PARAMS, "title": "T", "description": "D"}
+        result = _build_desired(params)
+        assert result == {"title": "T", "description": "D"}
+
+    def test_includes_definition(self):
+        params = {**DEFAULT_PRESENT_PARAMS, "definition": {"layout": {}}}
+        result = _build_desired(params)
+        assert result == {"definition": {"layout": {}}}
+
+    def test_includes_sharing(self):
+        params = {**DEFAULT_PRESENT_PARAMS, "sharing": "app"}
+        result = _build_desired(params)
+        assert result == {"sharing": "app"}
+
+
+# -- _build_create_payload --
+
+
+class TestBuildCreatePayload:
+    def test_basic_payload(self):
+        desired = {"title": "T", "definition": {"title": "T"}}
+        payload = _build_create_payload(desired)
+        assert payload["title"] == "T"
+        assert payload["gt_version"] == "beta"
+        assert payload["_owner"] == "nobody"
+        assert payload["_user"] == "nobody"
+
+    def test_syncs_title_into_definition(self):
+        desired = {"title": "New Title", "definition": {"title": "Old"}}
+        payload = _build_create_payload(desired)
+        assert payload["definition"]["title"] == "New Title"
+
+    def test_syncs_description_into_definition(self):
+        desired = {
+            "title": "T",
+            "description": "New desc",
+            "definition": {"title": "T", "description": "Old"},
+        }
+        payload = _build_create_payload(desired)
+        assert payload["definition"]["description"] == "New desc"
+
+    def test_sharing_maps_to_acl(self):
+        desired = {"title": "T", "sharing": "app"}
+        payload = _build_create_payload(desired)
+        assert payload["acl"] == {"sharing": "app"}
+
+    def test_no_sharing_no_acl(self):
+        desired = {"title": "T"}
+        payload = _build_create_payload(desired)
+        assert "acl" not in payload
+
+    def test_no_definition_no_sync(self):
+        desired = {"title": "T", "description": "D"}
+        payload = _build_create_payload(desired)
+        assert "definition" not in payload
+
+
+# -- main(): create --
+
+
+class TestMainCreate:
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_create_success(self, mock_mod_cls, mock_conn_cls):
+        api_resp = {"_key": "new123", "title": "T"}
+        mock_mod, mock_conn = _make_main_module(
+            {"title": "T", "description": "D", "definition": SAMPLE_DEFINITION},
+            conn_body=json.dumps(api_resp),
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is True
+        assert kw["after"]["title"] == "T"
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_create_requires_title(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"definition": SAMPLE_DEFINITION},
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleFailJson):
+            main()
+
+        assert "title" in mock_mod.fail_json.call_args[1]["msg"]
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_create_requires_definition(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module({"title": "T"})
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleFailJson):
+            main()
+
+        assert "definition" in mock_mod.fail_json.call_args[1]["msg"]
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_create_check_mode(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"title": "T", "definition": SAMPLE_DEFINITION},
+        )
+        mock_mod.check_mode = True
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is True
+        # API should NOT have been called
+        mock_conn.send_request.assert_not_called()
+
+
+# -- main(): update --
+
+
+class TestMainUpdate:
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_update_with_changes(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "abc123", "description": "updated"},
+            conn_body=json.dumps(SAMPLE_GT_API),
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is True
+        assert "description" in kw["diff"]
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_update_idempotent(self, mock_mod_cls, mock_conn_cls):
+        """No diff when desired matches current."""
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "abc123", "description": "desc"},
+            conn_body=json.dumps(SAMPLE_GT_API),
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is False
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_update_not_found(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "missing", "title": "T"},
+            conn_status=404,
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleFailJson):
+            main()
+
+        assert "not found" in mock_mod.fail_json.call_args[1]["msg"]
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_update_check_mode(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "abc123", "description": "updated"},
+            conn_body=json.dumps(SAMPLE_GT_API),
+        )
+        mock_mod.check_mode = True
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is True
+        # Only the GET to fetch current state, no POST for update
+        assert mock_conn.send_request.call_count == 1
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_update_no_desired_fields(self, mock_mod_cls, mock_conn_cls):
+        """If glass_table_id provided but no fields to update, no change."""
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "abc123"},
+            conn_body=json.dumps(SAMPLE_GT_API),
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is False
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_update_sharing(self, mock_mod_cls, mock_conn_cls):
+        """Sharing change maps to acl.sharing in the update payload."""
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "abc123", "sharing": "app"},
+            conn_body=json.dumps(SAMPLE_GT_API),
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is True
+        assert kw["diff"]["sharing"] == "app"
+
+
+# -- main(): delete --
+
+
+class TestMainDelete:
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_delete_existing(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "abc123", "state": "absent"},
+            conn_body=json.dumps(SAMPLE_GT_API),
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is True
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_delete_not_found_idempotent(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "missing", "state": "absent"},
+            conn_status=404,
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is False
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_delete_requires_id(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module({"state": "absent"})
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleFailJson):
+            main()
+
+        assert "glass_table_id" in mock_mod.fail_json.call_args[1]["msg"]
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_delete_check_mode(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, mock_conn = _make_main_module(
+            {"glass_table_id": "abc123", "state": "absent"},
+            conn_body=json.dumps(SAMPLE_GT_API),
+        )
+        mock_mod.check_mode = True
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.return_value = mock_conn
+
+        with pytest.raises(AnsibleExitJson):
+            main()
+
+        kw = mock_mod.exit_json.call_args[1]
+        assert kw["changed"] is True
+        # Only the GET to check existence, no DELETE call
+        assert mock_conn.send_request.call_count == 1
+
+
+# -- main(): error handling --
+
+
+class TestMainErrors:
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_no_socket_path(self, mock_mod_cls, mock_conn_cls):
+        mock_mod = MagicMock()
+        mock_mod._socket_path = None
+        mock_mod.params = {**DEFAULT_PRESENT_PARAMS}
+        mock_mod.fail_json.side_effect = AnsibleFailJson
+        mock_mod.exit_json.side_effect = AnsibleExitJson
+        mock_mod_cls.return_value = mock_mod
+
+        with pytest.raises(AnsibleFailJson):
+            main()
+
+        assert "httpapi" in mock_mod.fail_json.call_args[1]["msg"]
+
+    @patch(f"{MODULE_PATH}.Connection")
+    @patch(f"{MODULE_PATH}.AnsibleModule")
+    def test_connection_exception(self, mock_mod_cls, mock_conn_cls):
+        mock_mod, _mock_conn = _make_main_module(
+            {"title": "T", "definition": SAMPLE_DEFINITION},
+        )
+        mock_mod_cls.return_value = mock_mod
+        mock_conn_cls.side_effect = Exception("Connection failed")
+
+        with pytest.raises(AnsibleFailJson):
+            main()
+
+        assert "Failed to establish connection" in mock_mod.fail_json.call_args[1]["msg"]

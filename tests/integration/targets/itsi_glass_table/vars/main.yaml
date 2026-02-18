@@ -1,0 +1,57 @@
+---
+# Glass table test data
+test_glass_table_title: "ansible-test-glass-table"
+test_glass_table_updated_description: "Updated by Ansible integration test"
+
+test_glass_table:
+  description: "Ansible integration test glass table"
+  definition:
+    title: "ansible-test-glass-table"
+    description: "Ansible integration test glass table"
+    defaults:
+      dataSources:
+        global:
+          options:
+            queryParameters:
+              earliest: "$global_time.earliest$"
+              latest: "$global_time.latest$"
+            refreshType: delay
+            refresh: "$global_refresh_rate$"
+    layout:
+      options:
+        showTitleAndDescription: true
+      globalInputs:
+        - input_global_trp
+        - input_global_refresh_rate
+      tabs:
+        items:
+          - layoutId: layout_1
+            label: "Layout 1"
+      layoutDefinitions:
+        layout_1:
+          type: absolute
+          options:
+            width: 1920
+            height: 1080
+            backgroundColor: "#FFFFFF"
+          structure: []
+    dataSources: {}
+    visualizations: {}
+    inputs:
+      input_global_trp:
+        options:
+          defaultValue: "-60m@m, now"
+          token: global_time
+        type: input.timerange
+        title: Global Time Range
+      input_global_refresh_rate:
+        options:
+          items:
+            - value: "60s"
+              label: "1 Minute"
+            - value: "300s"
+              label: "5 Minutes"
+          defaultValue: "60s"
+          token: global_refresh_rate
+        type: input.dropdown
+        title: Global Refresh Rate

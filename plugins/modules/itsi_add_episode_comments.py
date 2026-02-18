@@ -250,6 +250,10 @@ def main() -> None:
 
     try:
         client = ItsiRequest(Connection(module._socket_path), module)
+    except Exception as e:
+        module.fail_json(msg=f"Failed to establish connection: {e}")
+
+    try:
         response = _add_comment(client, comment_data)
 
         result.update(changed=True, response=response)
@@ -257,7 +261,7 @@ def main() -> None:
 
     except Exception as e:
         module.fail_json(
-            msg=f"Error adding episode comment: {str(e)}",
+            msg=f"Exception occurred: {str(e)}",
             episode_key=episode_key,
         )
 

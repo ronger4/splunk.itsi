@@ -93,6 +93,8 @@ Name | Description
 [splunk.itsi.itsi_correlation_search](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_correlation_search_module.rst)|Manage Splunk ITSI correlation searches
 [splunk.itsi.itsi_correlation_search_info](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_correlation_search_info_module.rst)|Query Splunk ITSI correlation searches
 [splunk.itsi.itsi_episode_details_info](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_episode_details_info_module.rst)|Read Splunk ITSI notable_event_group (episodes)
+[splunk.itsi.itsi_glass_table](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_glass_table_module.rst)|Manage Splunk ITSI Glass Table objects via itoa_interface
+[splunk.itsi.itsi_glass_table_info](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_glass_table_info_module.rst)|Read Splunk ITSI glass table objects via itoa_interface
 [splunk.itsi.itsi_service](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_service_module.rst)|Manage Splunk ITSI Service objects via itoa_interface
 [splunk.itsi.itsi_service_info](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_service_info_module.rst)|Gather facts about Splunk ITSI Service objects via itoa_interface
 [splunk.itsi.itsi_update_episode_details](https://github.com/ansible-collections/splunk.itsi/blob/main/docs/splunk.itsi.itsi_update_episode_details_module.rst)|Update specific fields of Splunk ITSI episodes

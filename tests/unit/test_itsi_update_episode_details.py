@@ -483,8 +483,7 @@ class TestMain:
             main()
 
         mock_module.fail_json.assert_called_once()
-        assert "Exception occurred" in mock_module.fail_json.call_args[1]["msg"]
-        assert mock_module.fail_json.call_args[1]["episode_id"] == "abc-123"
+        assert "Failed to establish connection" in mock_module.fail_json.call_args[1]["msg"]
 
     @patch(f"{MODULE_PATH}.get_episode_by_id", side_effect=Exception("API timeout"))
     @patch(f"{MODULE_PATH}.Connection")
@@ -580,9 +579,15 @@ class TestMain:
         kw = mock_module.exit_json.call_args[1]
         assert kw["episode_id"] == "abc-123-def-456"
 
+    @patch(f"{MODULE_PATH}.get_episode_by_id", side_effect=Exception("Boom"))
     @patch(f"{MODULE_PATH}.Connection")
     @patch(f"{MODULE_PATH}.AnsibleModule")
-    def test_main_episode_id_in_error_result(self, mock_module_class, mock_connection):
+    def test_main_episode_id_in_error_result(
+        self,
+        mock_module_class,
+        mock_connection,
+        mock_get_episode,
+    ):
         """Test episode_id is present in fail_json result."""
         mock_module = MagicMock()
         mock_module._socket_path = "/tmp/socket"
@@ -598,8 +603,7 @@ class TestMain:
         mock_module.fail_json.side_effect = AnsibleFailJson
         mock_module.exit_json.side_effect = AnsibleExitJson
         mock_module_class.return_value = mock_module
-
-        mock_connection.side_effect = Exception("Boom")
+        mock_connection.return_value = MagicMock()
 
         with pytest.raises(AnsibleFailJson):
             main()

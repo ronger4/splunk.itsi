@@ -1,0 +1,7 @@
+---
+- name: Remove test glass table (cleanup)
+  splunk.itsi.itsi_glass_table:
+    glass_table_id: "{{ test_glass_table_id | default(omit) }}"
+    state: absent
+  when: test_glass_table_id is defined
+  ignore_errors: true

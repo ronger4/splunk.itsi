@@ -458,16 +458,24 @@ def main():
     if not getattr(module, "_socket_path", None):
         module.fail_json(msg="Use ansible_connection=httpapi and ansible_network_os=splunk.itsi.itsi_api_client")
 
-    client = ItsiRequest(Connection(module._socket_path), module)
+    try:
+        client = ItsiRequest(Connection(module._socket_path), module)
+    except Exception as e:
+        module.fail_json(msg=f"Failed to establish connection: {e}")
+
     result = {"changed": False, "before": {}, "after": {}, "diff": {}, "response": {}}
 
-    state = module.params["state"]
-    if state == "present":
-        _handle_state_present(module, client, module.params, result)
-    elif state == "absent":
-        _handle_absent_state(module, client, module.params, result)
+    try:
+        state = module.params["state"]
+        if state == "present":
+            _handle_state_present(module, client, module.params, result)
+        elif state == "absent":
+            _handle_absent_state(module, client, module.params, result)
 
-    module.exit_json(**result)
+        module.exit_json(**result)
+
+    except Exception as e:
+        module.fail_json(msg=f"Exception occurred: {str(e)}")
 
 
 if __name__ == "__main__":

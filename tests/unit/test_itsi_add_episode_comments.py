@@ -188,8 +188,7 @@ class TestMain:
             main()
 
         mock_module.fail_json.assert_called_once()
-        assert "Error adding episode comment" in mock_module.fail_json.call_args[1]["msg"]
-        assert mock_module.fail_json.call_args[1]["episode_key"] == SAMPLE_EPISODE_KEY
+        assert "Failed to establish connection" in mock_module.fail_json.call_args[1]["msg"]
 
     @patch(f"{MODULE_PATH}._add_comment", side_effect=Exception("API timeout"))
     @patch(f"{MODULE_PATH}.Connection")
@@ -218,7 +217,7 @@ class TestMain:
         with pytest.raises(AnsibleFailJson):
             main()
 
-        assert "Error adding episode comment" in mock_module.fail_json.call_args[1]["msg"]
+        assert "Exception occurred" in mock_module.fail_json.call_args[1]["msg"]
         assert mock_module.fail_json.call_args[1]["episode_key"] == SAMPLE_EPISODE_KEY
 
     # episode_key always in result
@@ -253,12 +252,14 @@ class TestMain:
         kw = mock_module.exit_json.call_args[1]
         assert kw["episode_key"] == SAMPLE_EPISODE_KEY
 
+    @patch(f"{MODULE_PATH}._add_comment", side_effect=Exception("Boom"))
     @patch(f"{MODULE_PATH}.Connection")
     @patch(f"{MODULE_PATH}.AnsibleModule")
     def test_main_episode_key_in_error_result(
         self,
         mock_module_class,
         mock_connection,
+        mock_add_comment,
     ):
         """Test episode_key is present in fail_json result."""
         mock_module = MagicMock()
@@ -272,8 +273,7 @@ class TestMain:
         mock_module.fail_json.side_effect = AnsibleFailJson
         mock_module.exit_json.side_effect = AnsibleExitJson
         mock_module_class.return_value = mock_module
-
-        mock_connection.side_effect = Exception("Boom")
+        mock_connection.return_value = MagicMock()
 
         with pytest.raises(AnsibleFailJson):
             main()

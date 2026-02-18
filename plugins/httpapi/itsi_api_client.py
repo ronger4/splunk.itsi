@@ -457,6 +457,31 @@ class HttpApi(HttpApiBase):
             self.connection.queue_message("vvv", f"ITSI HttpApi: Retry also failed: {str(retry_error)}")
             return False, None, retry_status
 
+    def _read_error_body(self, http_error: Exception) -> str:
+        """Extract the response body from an HTTP error when available.
+
+        ``urllib.error.HTTPError`` exposes the server's response via
+        ``read()``.  Capturing it gives callers the real error message
+        (e.g. missing fields, validation failures) instead of a generic
+        status line like "HTTP Error 400: Bad Request".
+
+        Args:
+            http_error: The caught exception (typically ``HTTPError``).
+
+        Returns:
+            The decoded response body, or an empty string if unavailable.
+        """
+        if not hasattr(http_error, "read"):
+            return ""
+        try:
+            return http_error.read().decode("utf-8", errors="replace")
+        except Exception as exc:
+            self.connection.queue_message(
+                "vvv",
+                f"ITSI HttpApi: Could not read error response body: {exc}",
+            )
+            return ""
+
     def _handle_http_error(
         self,
         http_error: Exception,
@@ -469,9 +494,12 @@ class HttpApi(HttpApiBase):
     ):
         """Handle HTTP request errors including 401 retry logic."""
         error_msg = str(http_error)
-        self.connection.queue_message("vvv", f"ITSI HttpApi: HTTP request failed: {error_msg}")
-
         error_status = getattr(http_error, "code", None) or 500
+        response_body = self._read_error_body(http_error)
+
+        self.connection.queue_message("vvv", f"ITSI HttpApi: HTTP {error_status} on {method} {path}: {error_msg}")
+        if response_body:
+            self.connection.queue_message("vvv", f"ITSI HttpApi: Server response: {response_body}")
 
         # Attempt 401 retry if applicable
         if self._should_retry_401(error_status):
@@ -488,8 +516,9 @@ class HttpApi(HttpApiBase):
             if new_status:
                 error_status = new_status
 
-        # Return error response
-        error_info = {"error": "HTTP request failed", "details": error_msg, "path": path, "method": method}
+        # Prefer the server's response body — it contains the real error details
+        details = response_body if response_body else error_msg
+        error_info = {"error": "HTTP request failed", "details": details, "path": path, "method": method}
         return self._build_error_response(int(error_status), error_info, return_enhanced)
 
     # ---------- main override ----------

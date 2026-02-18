@@ -213,7 +213,10 @@ def main() -> None:
 
     try:
         client = ItsiRequest(Connection(module._socket_path), module)
+    except Exception as e:
+        module.fail_json(msg=f"Failed to establish connection: {e}")
 
+    try:
         # Single-object GET by _key
         if module_params["episode_id"] and not module_params["count_only"]:
             body = get_episode_by_id(client, module_params["episode_id"])
