@@ -308,6 +308,7 @@ class TestNormalizeToList:
 def _mock_module():
     """Create a MagicMock AnsibleModule for ItsiRequest."""
     module = MagicMock()
+    module.exit_json.side_effect = AnsibleExitJson
     module.fail_json.side_effect = AnsibleFailJson
     return module
 
@@ -593,15 +594,15 @@ class TestEnsurePresent:
 
         mock_module = _mock_module()
         mock_module.check_mode = False
-        result = {}
         params = _default_params(name="new-search", search="test")
-        _handle_state_present(
-            mock_module,
-            ItsiRequest(mock_conn, mock_module),
-            params,
-            result,
-        )
+        with pytest.raises(AnsibleExitJson) as exc_info:
+            _handle_state_present(
+                mock_module,
+                ItsiRequest(mock_conn, mock_module),
+                params,
+            )
 
+        result = mock_module.exit_json.call_args[1]
         assert result["changed"] is True
 
     def test_ensure_present_no_change_needed(self):
@@ -610,25 +611,19 @@ class TestEnsurePresent:
 
         mock_module = _mock_module()
         mock_module.check_mode = False
-        result = {
-            "changed": False,
-            "before": {},
-            "after": {},
-            "diff": {},
-            "response": {},
-        }
         params = _default_params(
             name="Test Search",
             search="index=main | head 1",
             disabled=False,
         )
-        _handle_state_present(
-            mock_module,
-            ItsiRequest(mock_conn, mock_module),
-            params,
-            result,
-        )
+        with pytest.raises(AnsibleExitJson) as exc_info:
+            _handle_state_present(
+                mock_module,
+                ItsiRequest(mock_conn, mock_module),
+                params,
+            )
 
+        result = mock_module.exit_json.call_args[1]
         assert result["changed"] is False
 
     def test_ensure_present_update_needed(self):
@@ -642,18 +637,18 @@ class TestEnsurePresent:
 
         mock_module = _mock_module()
         mock_module.check_mode = False
-        result = {}
         params = _default_params(
             name="Test Search",
             description="New description",
         )
-        _handle_state_present(
-            mock_module,
-            ItsiRequest(mock_conn, mock_module),
-            params,
-            result,
-        )
+        with pytest.raises(AnsibleExitJson) as exc_info:
+            _handle_state_present(
+                mock_module,
+                ItsiRequest(mock_conn, mock_module),
+                params,
+            )
 
+        result = mock_module.exit_json.call_args[1]
         assert result["changed"] is True
 
     def test_ensure_present_update_cron_schedule_sets_is_scheduled(self):
@@ -684,17 +679,16 @@ class TestEnsurePresent:
 
         mock_module = _mock_module()
         mock_module.check_mode = False
-        result = {}
         params = _default_params(
             name="Test Search",
             cron_schedule="*/10 * * * *",
         )
-        _handle_state_present(
-            mock_module,
-            ItsiRequest(mock_conn, mock_module),
-            params,
-            result,
-        )
+        with pytest.raises(AnsibleExitJson) as exc_info:
+            _handle_state_present(
+                mock_module,
+                ItsiRequest(mock_conn, mock_module),
+                params,
+            )
 
         # Verify update was called with is_scheduled
         call_args = mock_conn.send_request.call_args_list[1]
@@ -707,7 +701,6 @@ class TestEnsurePresent:
 
         mock_module = _mock_module()
         mock_module.check_mode = False
-        result = {}
         params = _default_params(name="test")
 
         with pytest.raises(AnsibleFailJson):
@@ -715,7 +708,6 @@ class TestEnsurePresent:
                 mock_module,
                 ItsiRequest(mock_conn, mock_module),
                 params,
-                result,
             )
 
 

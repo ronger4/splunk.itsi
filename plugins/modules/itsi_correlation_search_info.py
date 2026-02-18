@@ -127,6 +127,7 @@ from ansible_collections.splunk.itsi.plugins.module_utils.correlation_search_uti
     list_correlation_searches,
 )
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 
 def _query_single_search(client, params: dict):
@@ -186,16 +187,14 @@ def main():
     except Exception as e:
         module.fail_json(msg=f"Failed to establish connection: {e}")
 
-    result: dict = {"changed": False, "response": {}}
-
     try:
         search_identifier = module.params.get("correlation_search_id") or module.params.get("name")
         if search_identifier:
-            result["response"] = _query_single_search(client, module.params)
+            response = _query_single_search(client, module.params)
         else:
-            result["response"] = _query_all_searches(client, module.params)
+            response = _query_all_searches(client, module.params)
 
-        module.exit_json(**result)
+        exit_with_result(module, response=response)
 
     except Exception as e:
         module.fail_json(msg=f"Exception occurred: {str(e)}")

@@ -103,6 +103,7 @@ from ansible_collections.splunk.itsi.plugins.module_utils.episode_details import
     get_episode_by_id,
 )
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 
 def _fetch_body(
@@ -217,20 +218,17 @@ def main() -> None:
         module.fail_json(msg=f"Failed to establish connection: {e}")
 
     try:
-        # Single-object GET by _key
         if module_params["episode_id"] and not module_params["count_only"]:
             body = get_episode_by_id(client, module_params["episode_id"])
             episodes = [body] if isinstance(body, dict) else []
-            result = {"episodes": episodes}
+            extra = {"episodes": episodes}
         elif module_params["count_only"]:
-            # Count endpoint
-            result = _get_episode_count(client, module_params["filter_data"])
+            extra = _get_episode_count(client, module_params["filter_data"])
         else:
-            # List endpoint
             params = _build_list_params(module_params)
-            result = _list_episodes(client, params)
+            extra = _list_episodes(client, params)
 
-        module.exit_json(changed=False, **result)
+        exit_with_result(module, extra=extra)
 
     except Exception as e:
         module.fail_json(msg=f"Exception occurred: {str(e)}")

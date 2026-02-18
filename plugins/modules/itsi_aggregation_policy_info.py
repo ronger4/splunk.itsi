@@ -128,9 +128,8 @@ from ansible_collections.splunk.itsi.plugins.module_utils.aggregation_policy_uti
     get_aggregation_policy_by_id,
     list_aggregation_policies,
 )
-
-# Import shared utilities
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 
 def get_aggregation_policies_by_title(
@@ -220,22 +219,20 @@ def main():
     title = module.params.get("title")
     fields = module.params.get("fields")
 
-    result: dict = {"changed": False, "response": {}}
-
     try:
         if policy_id:
-            result["response"] = _query_by_policy_id(client, policy_id, fields)
+            response = _query_by_policy_id(client, policy_id, fields)
         elif title:
-            result["response"] = _query_by_title(client, title, fields)
+            response = _query_by_title(client, title, fields)
         else:
-            result["response"] = _list_all_policies(
+            response = _list_all_policies(
                 client,
                 fields,
                 module.params.get("filter_data"),
                 module.params.get("limit"),
             )
 
-        module.exit_json(**result)
+        exit_with_result(module, response=response)
 
     except Exception as e:
         module.fail_json(msg=f"Exception occurred: {str(e)}")

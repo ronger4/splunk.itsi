@@ -241,9 +241,8 @@ from ansible_collections.splunk.itsi.plugins.module_utils.aggregation_policy_uti
     flatten_policy_object,
     get_aggregation_policy_by_id,
 )
-
-# Import shared utilities
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 
 def _normalize_disabled_value(value):
@@ -395,7 +394,7 @@ def _build_desired_data(params):
     return desired_data
 
 
-def _handle_state_present(module, client, result):
+def _handle_state_present(module, client):
     """Handle state=present logic."""
     policy_id = module.params.get("policy_id")
     title = module.params.get("title")
@@ -407,60 +406,51 @@ def _handle_state_present(module, client, result):
 
     # --- Create (no policy_id) ---
     if not policy_id:
-        result["before"] = {}
-        result["after"] = desired_data
-        result["diff"] = desired_data
-        result["changed"] = True
-        if not module.check_mode:
-            _status, _hdr, body = create_aggregation_policy(client, desired_data)
-            result["response"] = body
-            # Create response may only include an identifier. Re-fetch to return
-            # the full created policy object in `after`.
-            created_policy_id = body.get("_key") if isinstance(body, dict) else None
-            if created_policy_id:
-                get_created = get_aggregation_policy_by_id(client, created_policy_id)
-                if get_created is not None:
-                    _c_status, _c_hdr, created_obj = get_created
-                    result["after"] = created_obj
-                else:
-                    result["after"] = body
-            else:
-                result["after"] = body
-        return
+        if module.check_mode:
+            exit_with_result(module, changed=True, after=desired_data, diff=desired_data)
+
+        _status, _hdr, body = create_aggregation_policy(client, desired_data)
+        after = body
+        created_policy_id = body.get("_key") if isinstance(body, dict) else None
+        if created_policy_id:
+            get_created = get_aggregation_policy_by_id(client, created_policy_id)
+            if get_created is not None:
+                _c_status, _c_hdr, after = get_created
+        exit_with_result(module, changed=True, after=after, diff=desired_data, response=body)
 
     # --- Update (policy_id provided) ---
     get_result = get_aggregation_policy_by_id(client, policy_id)
     if get_result is None:
         module.fail_json(msg=f"Policy with ID '{policy_id}' not found")
-        return
 
     _cur_status, _cur_hdr, current_data = get_result
-    result["before"] = current_data
 
-    # Idempotency check
     current_canon = _canonicalize_policy(current_data)
     desired_canon = _canonicalize_policy(desired_data)
     diff_check = _diff_canonical(desired_canon, current_canon)
 
     if not diff_check:
-        result["after"] = current_data
-        return
+        exit_with_result(module, before=current_data, after=current_data)
 
-    # Build a simple diff: {field: new_value}
     diff = {k: v[1] for k, v in diff_check.items()}
     after = dict(current_data)
     after.update(desired_canon)
 
-    result["changed"] = True
-    result["diff"] = diff
-    result["after"] = after
+    if module.check_mode:
+        exit_with_result(module, changed=True, before=current_data, after=after, diff=diff)
 
-    if not module.check_mode:
-        _status, _hdr, body = update_aggregation_policy(client, policy_id, desired_canon, current_data)
-        result["response"] = body
+    _status, _hdr, body = update_aggregation_policy(client, policy_id, desired_canon, current_data)
+    exit_with_result(
+        module,
+        changed=True,
+        before=current_data,
+        after=after,
+        diff=diff,
+        response=body,
+    )
 
 
-def _handle_state_absent(module, client, result):
+def _handle_state_absent(module, client):
     """Handle state=absent logic."""
     policy_id = module.params.get("policy_id")
 
@@ -470,19 +460,25 @@ def _handle_state_absent(module, client, result):
     get_result = get_aggregation_policy_by_id(client, policy_id)
 
     if get_result is None:
-        # Already absent
-        return
+        exit_with_result(module)
 
     _cur_status, _cur_hdr, current_data = get_result
-    result["changed"] = True
-    result["before"] = current_data
-    result["diff"] = current_data
 
-    if not module.check_mode:
-        del_result = delete_aggregation_policy(client, policy_id)
-        if del_result is not None:
-            _status, _hdr, body = del_result
-            result["response"] = body
+    if module.check_mode:
+        exit_with_result(module, changed=True, before=current_data, diff=current_data)
+
+    response: dict = {}
+    del_result = delete_aggregation_policy(client, policy_id)
+    if del_result is not None:
+        _status, _hdr, body = del_result
+        response = body
+    exit_with_result(
+        module,
+        changed=True,
+        before=current_data,
+        diff=current_data,
+        response=response,
+    )
 
 
 def main():
@@ -519,16 +515,12 @@ def main():
     except Exception as e:
         module.fail_json(msg=f"Failed to establish connection: {e}")
 
-    result = {"changed": False, "before": {}, "after": {}, "diff": {}, "response": {}}
-
     try:
         state = module.params["state"]
         if state == "present":
-            _handle_state_present(module, client, result)
-        elif state == "absent":
-            _handle_state_absent(module, client, result)
-
-        module.exit_json(**result)
+            _handle_state_present(module, client)
+        else:
+            _handle_state_absent(module, client)
 
     except Exception as e:
         module.fail_json(msg=f"Exception occurred: {str(e)}")

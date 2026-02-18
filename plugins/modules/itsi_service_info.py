@@ -111,6 +111,7 @@ from urllib.parse import quote_plus
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 BASE = "servicesNS/nobody/SA-ITOA/itoa_interface/service"
 
@@ -231,24 +232,18 @@ def main() -> None:
 
     module_params = module.params
 
-    result: Dict[str, Any] = {
-        "changed": False,
-        "response": {},
-    }
-
     try:
         if module_params.get("service_id"):
-            result["response"] = _handle_get_by_id(client, module_params["service_id"])
-            module.exit_json(**result)
+            response = _handle_get_by_id(client, module_params["service_id"])
+            exit_with_result(module, response=response)
 
         params = _build_list_params(module_params)
         api_result = client.get(BASE, params=params)
         if api_result is None:
-            module.exit_json(**result)
+            exit_with_result(module)
         _status, _headers, body = api_result
-        result["response"] = body
 
-        module.exit_json(**result)
+        exit_with_result(module, response=body)
 
     except Exception as e:
         module.fail_json(msg=f"Exception occurred: {str(e)}")

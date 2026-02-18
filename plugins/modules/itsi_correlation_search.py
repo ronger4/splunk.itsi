@@ -199,6 +199,7 @@ from ansible_collections.splunk.itsi.plugins.module_utils.correlation_search_uti
     get_correlation_search,
 )
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 # Field name constants for dispatch time settings
 DISPATCH_EARLIEST_TIME = "dispatch.earliest_time"
@@ -341,7 +342,7 @@ def _build_desired_data(params: dict, search_identifier: str) -> dict:
     return desired_data
 
 
-def _handle_state_present(module, client, params: dict, result: dict):
+def _handle_state_present(module, client, params: dict):
     """Handle state=present logic."""
     name = params.get("name")
     correlation_search_id = params.get("correlation_search_id")
@@ -361,23 +362,19 @@ def _handle_state_present(module, client, params: dict, result: dict):
 
     # --- Create ---
     if not exists:
-        result["before"] = {}
-        result["after"] = desired_data
-        result["diff"] = desired_data
-        result["changed"] = True
-        if not module.check_mode:
-            _status, _hdr, _body = create_correlation_search(client, desired_data)
-            result["response"] = _body
-            # Re-fetch to get the uniform flattened shape
-            after = get_correlation_search(client, search_identifier, use_name_encoding=use_name_encoding)
-            if after is not None:
-                result["after"] = after[2]
-        return
+        if module.check_mode:
+            exit_with_result(module, changed=True, after=desired_data, diff=desired_data)
+
+        _status, _hdr, body = create_correlation_search(client, desired_data)
+        after = desired_data
+        refetched = get_correlation_search(client, search_identifier, use_name_encoding=use_name_encoding)
+        if refetched is not None:
+            after = refetched[2]
+        exit_with_result(module, changed=True, after=after, diff=desired_data, response=body)
 
     # --- Update ---
     _cur_status, _cur_hdr, cur_obj = current
     existing_flat = flatten_search_object(cur_obj) if isinstance(cur_obj, dict) else {}
-    result["before"] = existing_flat
 
     current_c = _canonicalize(existing_flat)
     desired_c = _canonicalize(desired_data)
@@ -387,27 +384,30 @@ def _handle_state_present(module, client, params: dict, result: dict):
     diff_check = _diff_canonical(complete_desired, current_c)
 
     if not diff_check:
-        result["after"] = existing_flat
-        return
+        exit_with_result(module, before=existing_flat, after=existing_flat)
 
-    # Build a simple diff: {field: new_value}
     diff = {k: v[1] for k, v in diff_check.items()}
     after = dict(existing_flat)
     after.update(desired_c)
 
-    result["changed"] = True
-    result["diff"] = diff
-    result["after"] = after
+    if module.check_mode:
+        exit_with_result(module, changed=True, before=existing_flat, after=after, diff=diff)
 
-    if not module.check_mode:
-        update_payload = dict(desired_c)
-        if _should_set_is_scheduled(existing_flat, diff_check):
-            update_payload["is_scheduled"] = "1"
-        _status, _hdr, _body = update_correlation_search(client, search_identifier, update_payload)
-        result["response"] = _body
+    update_payload = dict(desired_c)
+    if _should_set_is_scheduled(existing_flat, diff_check):
+        update_payload["is_scheduled"] = "1"
+    _status, _hdr, body = update_correlation_search(client, search_identifier, update_payload)
+    exit_with_result(
+        module,
+        changed=True,
+        before=existing_flat,
+        after=after,
+        diff=diff,
+        response=body,
+    )
 
 
-def _handle_absent_state(module, client, params: dict, result: dict):
+def _handle_absent_state(module, client, params: dict):
     """Handle state=absent logic."""
     name = params.get("name")
     correlation_search_id = params.get("correlation_search_id")
@@ -420,21 +420,26 @@ def _handle_absent_state(module, client, params: dict, result: dict):
     current = get_correlation_search(client, search_identifier, use_name_encoding=use_name_encoding)
 
     if current is None:
-        # Already absent
-        return
+        exit_with_result(module)
 
     _cur_status, _cur_hdr, cur_obj = current
     existing_flat = flatten_search_object(cur_obj) if isinstance(cur_obj, dict) else {}
 
-    result["changed"] = True
-    result["before"] = existing_flat
-    result["diff"] = existing_flat
+    if module.check_mode:
+        exit_with_result(module, changed=True, before=existing_flat, diff=existing_flat)
 
-    if not module.check_mode:
-        del_result = delete_correlation_search(client, search_identifier, use_name_encoding=use_name_encoding)
-        if del_result is not None:
-            _status, _hdr, body = del_result
-            result["response"] = body
+    response: dict = {}
+    del_result = delete_correlation_search(client, search_identifier, use_name_encoding=use_name_encoding)
+    if del_result is not None:
+        _status, _hdr, body = del_result
+        response = body
+    exit_with_result(
+        module,
+        changed=True,
+        before=existing_flat,
+        diff=existing_flat,
+        response=response,
+    )
 
 
 def main():
@@ -463,16 +468,12 @@ def main():
     except Exception as e:
         module.fail_json(msg=f"Failed to establish connection: {e}")
 
-    result = {"changed": False, "before": {}, "after": {}, "diff": {}, "response": {}}
-
     try:
         state = module.params["state"]
         if state == "present":
-            _handle_state_present(module, client, module.params, result)
-        elif state == "absent":
-            _handle_absent_state(module, client, module.params, result)
-
-        module.exit_json(**result)
+            _handle_state_present(module, client, module.params)
+        else:
+            _handle_absent_state(module, client, module.params)
 
     except Exception as e:
         module.fail_json(msg=f"Exception occurred: {str(e)}")

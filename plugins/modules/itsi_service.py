@@ -161,6 +161,7 @@ from urllib.parse import quote_plus
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 BASE = "servicesNS/nobody/SA-ITOA/itoa_interface/service"
 TEMPLATE_BASE = "servicesNS/nobody/SA-ITOA/itoa_interface/base_service_template"
@@ -217,7 +218,6 @@ def _resolve_base_service_template_id(
     client: ItsiRequest,
     template_ref: str,
     module: AnsibleModule,
-    result: Dict[str, Any],
 ) -> str:
     """Resolve a template reference (ID or title) into a template ID.
 
@@ -225,7 +225,6 @@ def _resolve_base_service_template_id(
         client: ItsiRequest instance.
         template_ref: Template identifier provided by the user. Can be a UUID-like `_key` or a title.
         module: Ansible module (used for fail_json).
-        result: Result dict (passed to fail_json for context).
 
     Returns:
         The resolved template `_key`.
@@ -235,17 +234,15 @@ def _resolve_base_service_template_id(
 
     api_result = client.get(TEMPLATE_BASE, params={"filter": json.dumps({"title": template_ref})})
     if api_result is None:
-        module.fail_json(msg=f"Template '{template_ref}' not found.", **result)
+        module.fail_json(msg=f"Template '{template_ref}' not found.")
     _status, _headers, body = api_result
 
-    # ITSI itoa_interface API returns a list directly
     template = None
     if isinstance(body, list):
         matches = [d for d in body if isinstance(d, dict) and d.get("title") == template_ref]
         if len(matches) > 1:
             module.fail_json(
                 msg="Multiple service templates found with the same title; use the template ID (_key).",
-                **result,
             )
         if matches:
             template = matches[0]
@@ -253,7 +250,6 @@ def _resolve_base_service_template_id(
     if not template or not template.get("_key"):
         module.fail_json(
             msg=f"Service template with title '{template_ref}' was not found. Use the template ID (_key).",
-            **result,
         )
 
     return str(template["_key"])
@@ -679,7 +675,6 @@ def _handle_absent(
     client: ItsiRequest,
     current: Optional[Dict[str, Any]],
     key: Optional[str],
-    result: Dict[str, Any],
 ) -> None:
     """Handle state=absent: delete the service if it exists.
 
@@ -688,20 +683,15 @@ def _handle_absent(
         client: ItsiRequest instance.
         current: Current service document, or None if not found.
         key: Service _key if provided.
-        result: Result dict to update.
     """
     if not current:
-        module.exit_json(**result)
+        exit_with_result(module)
 
-    result["changed"] = True
-    result["before"] = current
-    result["diff"] = current
+    if module.check_mode:
+        exit_with_result(module, changed=True, before=current, diff=current)
 
-    if not module.check_mode:
-        body = _delete(client, current.get("_key", key))
-        result["response"] = body or {}
-
-    module.exit_json(**result)
+    body = _delete(client, current.get("_key", key))
+    exit_with_result(module, changed=True, before=current, diff=current, response=body or {})
 
 
 def _handle_create(
@@ -709,7 +699,6 @@ def _handle_create(
     client: ItsiRequest,
     desired: Dict[str, Any],
     name: Optional[str],
-    result: Dict[str, Any],
 ) -> None:
     """Handle service creation when no current service exists.
 
@@ -718,13 +707,12 @@ def _handle_create(
         client: ItsiRequest instance.
         desired: Desired service payload.
         name: Service name/title if provided.
-        result: Result dict to update.
     """
     if "title" not in desired:
         if name:
             desired["title"] = name
         else:
-            module.fail_json(msg="Creating a service requires 'name' (title).", **result)
+            module.fail_json(msg="Creating a service requires 'name' (title).")
 
     template_ref = desired.get("base_service_template_id")
     if template_ref not in (None, ""):
@@ -732,22 +720,17 @@ def _handle_create(
             client=client,
             template_ref=str(template_ref),
             module=module,
-            result=result,
         )
 
-    result["changed"] = True
-    result["before"] = {}
-    result["diff"] = desired
-    result["after"] = desired
+    if module.check_mode:
+        exit_with_result(module, changed=True, after=desired, diff=desired)
 
-    if not module.check_mode:
-        body = _create(client, desired)
-        result["response"] = body or {}
-        created = body if isinstance(body, dict) else {}
-        if created.get("_key"):
-            result["after"] = {"_key": created["_key"], **desired}
-
-    module.exit_json(**result)
+    body = _create(client, desired)
+    after = desired
+    created = body if isinstance(body, dict) else {}
+    if created.get("_key"):
+        after = {"_key": created["_key"], **desired}
+    exit_with_result(module, changed=True, after=after, diff=desired, response=body or {})
 
 
 def _handle_update(
@@ -756,7 +739,6 @@ def _handle_update(
     current: Dict[str, Any],
     key: Optional[str],
     desired: Dict[str, Any],
-    result: Dict[str, Any],
 ) -> None:
     """Handle service update when a current service exists.
 
@@ -766,19 +748,14 @@ def _handle_update(
         current: Current service document.
         key: Service _key if provided.
         desired: Desired service payload.
-        result: Result dict to update.
     """
-    # Ensure title present in payload for Splunk validation
     if "title" not in desired and current.get("title"):
         desired["title"] = current["title"]
 
     patch, changed_fields = _compute_patch(current, desired)
 
-    result["before"] = current
-
     if not patch:
-        result["after"] = current
-        module.exit_json(**result)
+        exit_with_result(module, before=current, after=current)
 
     # ITSI requires title in UPDATE requests even if unchanged
     if "title" not in patch and current.get("title"):
@@ -787,15 +764,18 @@ def _handle_update(
     after = dict(current)
     after.update(patch)
 
-    result["changed"] = True
-    result["diff"] = patch
-    result["after"] = after
+    if module.check_mode:
+        exit_with_result(module, changed=True, before=current, after=after, diff=patch)
 
-    if not module.check_mode:
-        body = _update(client, current.get("_key", key), patch, current_doc=current)
-        result["response"] = body or {}
-
-    module.exit_json(**result)
+    body = _update(client, current.get("_key", key), patch, current_doc=current)
+    exit_with_result(
+        module,
+        changed=True,
+        before=current,
+        after=after,
+        diff=patch,
+        response=body or {},
+    )
 
 
 def main() -> None:
@@ -830,33 +810,22 @@ def main() -> None:
     except Exception as e:
         module.fail_json(msg=f"Failed to establish connection: {e}")
 
-    result: Dict[str, Any] = {
-        "changed": False,
-        "before": {},
-        "after": {},
-        "diff": {},
-        "response": {},
-    }
-
     try:
         state = params["state"]
         key = params.get("service_id")
         name = params.get("name")
 
-        # Discover current service state
         current = _discover_current(client=client, key=key, name=name)
 
-        # Absent
         if state == "absent":
-            _handle_absent(module, client, current, key, result)
+            _handle_absent(module, client, current, key)
 
-        # Handle state=present
         desired = _desired_payload(params)
 
         if not current:
-            _handle_create(module, client, desired, name, result)
+            _handle_create(module, client, desired, name)
 
-        _handle_update(module, client, current, key, desired, result)
+        _handle_update(module, client, current, key, desired)
 
     except Exception as e:
         module.fail_json(msg=f"Exception occurred: {str(e)}")

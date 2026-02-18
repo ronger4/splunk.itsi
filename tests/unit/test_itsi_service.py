@@ -648,13 +648,11 @@ class TestResolveBaseServiceTemplateId:
         """Test UUID is returned as-is."""
         mock_conn = MagicMock()
         mock_module = MagicMock()
-        result = {}
 
         resolved = _resolve_base_service_template_id(
             client=ItsiRequest(mock_conn, mock_module),
             template_ref="a2961217-9728-4e9f-b67b-15bf4a40ad7c",
             module=mock_module,
-            result=result,
         )
 
         assert resolved == "a2961217-9728-4e9f-b67b-15bf4a40ad7c"
@@ -664,13 +662,11 @@ class TestResolveBaseServiceTemplateId:
         """Test title resolution succeeds."""
         mock_conn = make_mock_conn(200, json.dumps([SAMPLE_TEMPLATE]))
         mock_module = MagicMock()
-        result = {}
 
         resolved = _resolve_base_service_template_id(
             client=ItsiRequest(mock_conn, mock_module),
             template_ref="My Service Template",
             module=mock_module,
-            result=result,
         )
 
         assert resolved == "12345678-1234-5678-90ab-cdef12345678"
@@ -679,16 +675,13 @@ class TestResolveBaseServiceTemplateId:
         """Test title resolution fails when not found."""
         mock_conn = make_mock_conn(200, json.dumps([]))
         mock_module = MagicMock()
-        # Make fail_json raise an exception to stop execution
         mock_module.fail_json.side_effect = AnsibleFailJson
-        result = {}
 
         with pytest.raises(AnsibleFailJson):
             _resolve_base_service_template_id(
                 client=ItsiRequest(mock_conn, mock_module),
                 template_ref="Nonexistent Template",
                 module=mock_module,
-                result=result,
             )
 
         mock_module.fail_json.assert_called_once()
@@ -706,16 +699,13 @@ class TestResolveBaseServiceTemplateId:
             ),
         )
         mock_module = MagicMock()
-        # Make fail_json raise an exception to stop execution
         mock_module.fail_json.side_effect = AnsibleFailJson
-        result = {}
 
         with pytest.raises(AnsibleFailJson):
             _resolve_base_service_template_id(
                 client=ItsiRequest(mock_conn, mock_module),
                 template_ref="Duplicate Template",
                 module=mock_module,
-                result=result,
             )
 
         mock_module.fail_json.assert_called_once()

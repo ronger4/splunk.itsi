@@ -164,6 +164,7 @@ from typing import Any
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
 
 # API endpoint for ITSI notable event comments
 BASE_COMMENT_ENDPOINT = "servicesNS/nobody/SA-ITOA/event_management_interface/notable_event_comment"
@@ -232,21 +233,16 @@ def main() -> None:
     is_group: bool = module.params["is_group"]
 
     comment_data = _build_comment_data(episode_key, comment, is_group)
+    extra = {"episode_key": episode_key}
 
-    # Build result dict with common keys
-    # before is always empty because comments are newly created
-    result: dict[str, Any] = {
-        "episode_key": episode_key,
-        "before": {},
-        "after": comment_data,
-        "diff": comment_data,
-        "response": {},
-    }
-
-    # Check mode -- report what would be posted without calling the API
     if module.check_mode:
-        result["changed"] = True
-        module.exit_json(**result)
+        exit_with_result(
+            module,
+            changed=True,
+            after=comment_data,
+            diff=comment_data,
+            extra=extra,
+        )
 
     try:
         client = ItsiRequest(Connection(module._socket_path), module)
@@ -255,9 +251,14 @@ def main() -> None:
 
     try:
         response = _add_comment(client, comment_data)
-
-        result.update(changed=True, response=response)
-        module.exit_json(**result)
+        exit_with_result(
+            module,
+            changed=True,
+            after=comment_data,
+            diff=comment_data,
+            response=response,
+            extra=extra,
+        )
 
     except Exception as e:
         module.fail_json(
