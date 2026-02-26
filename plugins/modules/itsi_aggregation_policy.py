@@ -164,6 +164,26 @@ EXAMPLES = r"""
     policy_id: "{{ create_result.response._key }}"
     group_severity: "high"
     disabled: false
+    filter_criteria:
+      condition: "OR"
+      items:
+        [
+          {
+            "type": "clause",
+            "config":
+              {
+                "items":
+                  [
+                    {
+                      "type": "notable_event_field",
+                      "config":
+                        { "field": "severity", "operator": "<", "value": "6" },
+                    },
+                  ],
+                "condition": "AND",
+              },
+          },
+        ]
     state: present
   register: update_result
 # update_result.diff shows fields that changed
@@ -233,9 +253,6 @@ from urllib.parse import quote_plus
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
-from ansible_collections.ansible.netcommon.plugins.module_utils.network.common import (
-    utils,
-)
 from ansible_collections.splunk.itsi.plugins.module_utils.aggregation_policy_utils import (
     BASE_AGGREGATION_POLICY_ENDPOINT,
     get_aggregation_policy_by_id,
@@ -293,6 +310,32 @@ def delete_aggregation_policy(client, policy_id):
     path = f"{BASE_AGGREGATION_POLICY_ENDPOINT}/{quote_plus(policy_id)}"
     params = {"output_mode": "json"}
     return client.delete(path, params=params)
+
+
+# ------------------------------------------------------------------
+# Diffing helpers
+# ------------------------------------------------------------------
+
+
+def _dict_diff(want, have):
+    """Return fields from *want* that differ from *have*.
+
+    netcommon's ``utils.dict_diff`` crashes on empty lists (``sort_list``
+    does ``val[0]`` on ``[]``).  ITSI criteria objects legitimately
+    contain ``"items": []``, so we need a safe implementation.
+    """
+    diff = {}
+    for key, desired in want.items():
+        if key not in have:
+            diff[key] = desired
+            continue
+        current = have[key]
+        if isinstance(desired, dict) and isinstance(current, dict):
+            if _dict_diff(desired, current):
+                diff[key] = desired
+        elif desired != current:
+            diff[key] = desired
+    return diff
 
 
 # ------------------------------------------------------------------
@@ -370,11 +413,10 @@ def _handle_state_present(module, client):
         current_data,
         normalizers={"disabled": _normalize_disabled_value},
     )
-    want_conf: dict = utils.remove_empties(desired_data)
-    diff: dict = utils.dict_diff(have_conf, want_conf)
+    diff: dict = _dict_diff(desired_data, have_conf)
 
     after: dict = dict(current_data)
-    after.update(want_conf)
+    after.update(desired_data)
 
     if not diff:
         exit_with_result(module, before=current_data, after=current_data)
