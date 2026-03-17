@@ -64,7 +64,7 @@ jobs:
           rm -rf ~/venv-itsi
           python -m venv ~/venv-itsi
           source ~/venv-itsi/bin/activate
-          pip install -r requirements.txt
+          pip install -r tests/integration/requirements.txt
 
       - name: Install collection dependencies
         run: |
