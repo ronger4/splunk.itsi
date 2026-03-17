@@ -76,10 +76,13 @@ class GlassTableDefinitionValidator:
     def _validate_schema(self, definition: dict[str, Any]) -> list[str]:
         """Validate definition against the JSON Schema using Draft7Validator.
 
-        Returns an empty list when jsonschema is not installed.
+        Raises:
+            ImportError: If the jsonschema package is not installed.
         """
         if not HAS_JSONSCHEMA:
-            return []
+            raise ImportError(
+                "The 'jsonschema' package is required for glass table definition",
+            )
 
         validator = Draft7Validator(SCHEMA)
         schema_errors = sorted(

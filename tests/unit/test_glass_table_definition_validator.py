@@ -99,13 +99,13 @@ class TestSchemaValidation:
 
 
 class TestSchemaValidationWithoutJsonschema:
-    def test_graceful_skip_when_missing(self, validator):
+    def test_raises_import_error_when_missing(self, validator):
         with patch(
             "ansible_collections.splunk.itsi.plugins.module_utils.glass_table.HAS_JSONSCHEMA",
             False,
         ):
-            errors = validator._validate_schema(VALID_DEFINITION)
-            assert errors == []
+            with pytest.raises(ImportError, match="jsonschema"):
+                validator._validate_schema(VALID_DEFINITION)
 
 
 class TestReferentialIntegrityLayoutItems:

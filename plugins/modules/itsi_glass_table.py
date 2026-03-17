@@ -357,7 +357,10 @@ def _validate_definition_or_fail(
         definition: The definition dict to validate.
     """
     validator = GlassTableDefinitionValidator()
-    errors = validator.validate(definition)
+    try:
+        errors = validator.validate(definition)
+    except ImportError as exc:
+        module.fail_json(msg=str(exc))
     if errors:
         module.fail_json(
             msg="Glass table definition validation failed",
