@@ -43,32 +43,46 @@ jobs:
       github.event.action != 'labeled')
     uses: ansible-network/github_actions/.github/workflows/safe-to-test.yml@main
 
-  network-integration:
-    name: "Integration (${{ matrix.ansible_version }})"
-    runs-on: [splunk-itsi]
-    environment:
-      name: ${{ github.event_name == 'schedule' && 'eco-itsi-daily' || 'eco-itsi-protected' }}
+  build-matrix:
+    name: Build Matrix
+    runs-on: ubuntu-latest
     needs:
       - check-actor
       - safe-to-test
     if: >-
       always() &&
       needs.check-actor.result == 'success' &&
-      (needs.safe-to-test.result == 'success' || needs.safe-to-test.result == 'skipped') &&
-      (matrix.ansible_version == 'stable-2.21' ||
-       github.event_name == 'schedule' ||
-       inputs.full_matrix == true)
+      (needs.safe-to-test.result == 'success' || needs.safe-to-test.result == 'skipped')
+    outputs:
+      ansible_version: ${{ steps.matrix.outputs.versions }}
+    steps:
+      - name: Determine ansible-core versions
+        id: matrix
+        env:
+          FULL_MATRIX: >-
+            ["stable-2.16", "stable-2.17", "stable-2.18",
+             "stable-2.19", "stable-2.20", "stable-2.21"]
+          DEFAULT_MATRIX: '["stable-2.21"]'
+        run: |
+          if [[ "${{ github.event_name }}" == "schedule" || "${{ inputs.full_matrix }}" == "true" ]]; then
+            echo "versions=$FULL_MATRIX" >> "$GITHUB_OUTPUT"
+          else
+            echo "versions=$DEFAULT_MATRIX" >> "$GITHUB_OUTPUT"
+          fi
+
+  network-integration:
+    name: "Integration (${{ matrix.ansible_version }})"
+    runs-on: [splunk-itsi]
+    environment:
+      name: ${{ github.event_name == 'schedule' && 'eco-itsi-daily' || 'eco-itsi-protected' }}
+    needs:
+      - build-matrix
+    if: needs.build-matrix.result == 'success'
     strategy:
       fail-fast: false
       max-parallel: 1
       matrix:
-        ansible_version:
-          - stable-2.16
-          - stable-2.17
-          - stable-2.18
-          - stable-2.19
-          - stable-2.20
-          - stable-2.21
+        ansible_version: ${{ fromJSON(needs.build-matrix.outputs.ansible_version) }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
