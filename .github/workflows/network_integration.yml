@@ -38,9 +38,9 @@ jobs:
       github.event.action != 'labeled')
     uses: ansible-network/github_actions/.github/workflows/safe-to-test.yml@main
 
-  network-integration:
-    name: "Integration (${{ matrix.ansible_version }})"
-    runs-on: [splunk-itsi]
+  approve:
+    name: Approve Integration
+    runs-on: ubuntu-latest
     environment:
       name: ${{ github.event_name == 'schedule' && 'eco-itsi-daily' || 'eco-itsi-protected' }}
     needs:
@@ -50,6 +50,15 @@ jobs:
       always() &&
       needs.check-actor.result == 'success' &&
       (needs.safe-to-test.result == 'success' || needs.safe-to-test.result == 'skipped')
+    steps:
+      - run: echo "Deployment approved"
+
+  network-integration:
+    name: "Integration (${{ matrix.ansible_version }})"
+    runs-on: [splunk-itsi]
+    needs:
+      - approve
+    if: needs.approve.result == 'success'
     strategy:
       fail-fast: false
       max-parallel: 1
