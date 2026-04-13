@@ -198,15 +198,13 @@ response:
 """
 
 
-from ansible.module_utils.basic import AnsibleModule
-from ansible.module_utils.connection import Connection
-from ansible.module_utils.six.moves.urllib.parse import (
+from urllib.parse import (
     quote,
     quote_plus,
 )
-from ansible_collections.ansible.netcommon.plugins.module_utils.network.common import (
-    utils,
-)
+
+from ansible.module_utils.basic import AnsibleModule
+from ansible.module_utils.connection import Connection
 from ansible_collections.splunk.itsi.plugins.module_utils.correlation_search_utils import (
     BASE_EVENT_MGMT,
     get_correlation_search,
@@ -214,7 +212,9 @@ from ansible_collections.splunk.itsi.plugins.module_utils.correlation_search_uti
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
 from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import (
     build_have_conf,
+    dict_diff,
     exit_with_result,
+    remove_empties,
 )
 
 # Field name constants for dispatch time settings
@@ -347,8 +347,8 @@ def _handle_state_present(module, client, params: dict):
         normalizers={"disabled": _normalize_disabled},
         exclude_keys={"name"},
     )
-    want_conf: dict = {k: v for k, v in utils.remove_empties(desired_data).items() if k != "name"}
-    diff: dict = utils.dict_diff(have_conf, want_conf)
+    want_conf: dict = {k: v for k, v in remove_empties(desired_data).items() if k != "name"}
+    diff: dict = dict_diff(have_conf, want_conf)
 
     after: dict = dict(cur_obj)
     after.update(want_conf)

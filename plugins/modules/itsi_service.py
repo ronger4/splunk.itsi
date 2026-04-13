@@ -174,13 +174,12 @@ from urllib.parse import quote_plus
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
-from ansible_collections.ansible.netcommon.plugins.module_utils.network.common import (
-    utils,
-)
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
 from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import (
     build_have_conf,
+    dict_diff,
     exit_with_result,
+    remove_empties,
 )
 
 BASE = "servicesNS/nobody/SA-ITOA/itoa_interface/service"
@@ -564,8 +563,8 @@ def _handle_update(
         current,
         normalizers={"enabled": _int_bool, "service_tags": _normalize_service_tags},
     )
-    want_conf: dict = utils.remove_empties(desired)
-    diff: dict = utils.dict_diff(have_conf, want_conf)
+    want_conf: dict = remove_empties(desired)
+    diff: dict = dict_diff(have_conf, want_conf)
 
     after: dict = dict(current)
     after.update(want_conf)

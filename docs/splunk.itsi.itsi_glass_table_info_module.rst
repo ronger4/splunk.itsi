@@ -22,12 +22,6 @@ Synopsis
 
 
 
-Requirements
-------------
-The below requirements are needed on the host that executes this module.
-
-- ansible.netcommon
-
 
 Parameters
 ----------

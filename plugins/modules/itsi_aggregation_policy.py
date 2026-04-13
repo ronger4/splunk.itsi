@@ -328,9 +328,9 @@ def delete_aggregation_policy(client, policy_id):
 def _dict_diff(want, have):
     """Return fields from *want* that differ from *have*.
 
-    netcommon's ``utils.dict_diff`` crashes on empty lists (``sort_list``
-    does ``val[0]`` on ``[]``).  ITSI criteria objects legitimately
-    contain ``"items": []``, so we need a safe implementation.
+    Recursive for nested dicts; safe for empty lists (no ``val[0]``
+    on ``[]``).  ITSI criteria objects legitimately contain
+    ``"items": []``.
     """
     diff = {}
     for key, desired in want.items():

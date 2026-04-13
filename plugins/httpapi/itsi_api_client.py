@@ -19,7 +19,7 @@ description:
   - Modules call C(conn.send_request(path, data, method="GET")) and this plugin injects authentication and JSON headers.
   - Returns response format with status, headers, and body structure for full HTTP metadata access.
   - Automatically adds C(output_mode=json) to GET requests for consistent JSON responses from Splunk.
-  - Compatible with both core httpapi and ansible.netcommon.httpapi connections for advanced features.
+  - Compatible with both core httpapi and ansible.netcommon.httpapi connections (netcommon is optional).
 version_added: "1.0.0"
 options:
   token:
@@ -59,7 +59,8 @@ options:
       - name: ansible_httpapi_pass
 notes:
   - Basic configuration requires C(ansible_connection=httpapi) and C(ansible_network_os=splunk.itsi.itsi_api_client).
-  - Advanced configuration uses C(ansible_connection=ansible.netcommon.httpapi) for proxy, SSL certs, timeouts, and connection persistence.
+  - For advanced features (proxy, SSL certs, timeouts, connection persistence) install
+    C(ansible.netcommon) separately and use C(ansible_connection=ansible.netcommon.httpapi).
   - Always returns enhanced response format with structure containing status code, headers dict, and body string.
   - Authentication methods tried in priority order are Bearer token, explicit session key, auto-retrieved session key, Basic auth.
   - Auto-retrieved session keys are obtained via C(/services/auth/login) using remote_user and password credentials.
@@ -80,7 +81,7 @@ EXAMPLES = r"""
 # ansible_httpapi_port=8089
 # ansible_httpapi_validate_certs=false
 
-# Advanced HTTP API Configuration (ansible.netcommon.httpapi)
+# Advanced HTTP API Configuration (requires ansible.netcommon installed separately)
 # Provides proxy support, client certificates, custom timeouts, connection persistence
 # [splunk_advanced]
 # splunk-enterprise.example.com
@@ -131,18 +132,14 @@ BASE_HEADERS = {
 class HttpApi(HttpApiBase):
     """HttpApi plugin for Splunk ITSI with token/session_key/basic auth and JSON defaults.
 
-    Compatible with both core httpapi and ansible.netcommon.httpapi connections.
+    Uses core httpapi; also compatible with ansible.netcommon.httpapi if installed.
     """
 
     def __init__(self, *args, **kwargs):
-        """Initialize per-instance authentication cache.
-
-        Compatible with both core httpapi and ansible.netcommon.httpapi constructors.
-        """
+        """Initialize per-instance authentication cache."""
         # Call parent constructor with all provided arguments
         super().__init__(*args, **kwargs)
 
-        # Store connection reference if provided (for netcommon compatibility)
         self._connection = args[0] if args else kwargs.get("connection")
 
         # Authentication cache to avoid repeated logins (instance-level attributes)
@@ -153,12 +150,12 @@ class HttpApi(HttpApiBase):
         self._fallback_to_auto_session = False  # Flag for explicit session_key 401 fallback
 
     def logout(self):
-        """Logout method for ansible.netcommon.httpapi compatibility."""
+        """Clear cached authentication on logout."""
         # Clear cached authentication on logout
         self._clear_auth_cache()
 
     def handle_httperror(self, exc):
-        """Handle HTTP errors for ansible.netcommon.httpapi compatibility.
+        """Handle HTTP errors with optional 401 retry logic.
 
         Returns:
         - True: Retry the request once with refreshed authentication
@@ -183,7 +180,7 @@ class HttpApi(HttpApiBase):
         return True
 
     def update_auth(self, response, response_text):
-        """Update authentication tokens for ansible.netcommon.httpapi compatibility.
+        """Update authentication tokens from response (no-op for ITSI).
 
         Args:
             response: HTTP response object
@@ -219,7 +216,7 @@ class HttpApi(HttpApiBase):
         status = None
         headers_map = {}
 
-        # netcommon: (response, buffer)
+        # (response, buffer) tuple format — used by ansible.netcommon.httpapi if installed
         if isinstance(resp, tuple) and len(resp) == 2:
             meta, _unused_buffer = resp
             # status extraction across variants
@@ -627,7 +624,7 @@ class HttpApi(HttpApiBase):
             response_content: Response content from connection.send()
             strip_whitespace: If True, strip leading/trailing whitespace (default True)
 
-        Compatible with both core httpapi and ansible.netcommon.httpapi response formats.
+        Handles string, buffer, and (response, buffer) tuple formats.
         """
         self.connection.queue_message("vvv", f"ITSI HttpApi: _handle_response received type: {type(response_content)}")
 
@@ -635,7 +632,6 @@ class HttpApi(HttpApiBase):
         if isinstance(response_content, (str, bytes)):
             response_text = self._to_string(response_content)
         elif isinstance(response_content, tuple) and len(response_content) == 2:
-            # ansible.netcommon.httpapi returns (response, buffer)
             _unused_meta, buffer = response_content
             response_text = self._read_buffer(buffer)
         elif hasattr(response_content, "getvalue") or hasattr(response_content, "read"):

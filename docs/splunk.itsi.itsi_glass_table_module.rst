@@ -171,7 +171,7 @@ Notes
    - Update operations use ``is_partial_data=1`` and send only the fields that changed.
    - This module is idempotent. If the desired field values already match the current state, no update is performed and ``changed`` is returned as ``false``.
    - Check mode is supported. In check mode the module reports whether changes would be made without actually calling the API.
-   - Diff detection uses recursive comparison via ``dict_diff`` from ansible.netcommon, so changes nested deep inside ``definition`` are properly detected.
+   - Diff detection uses recursive comparison via ``dict_diff``, so changes nested deep inside ``definition`` are properly detected.
 
 
 

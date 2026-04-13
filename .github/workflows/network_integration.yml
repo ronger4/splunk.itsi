@@ -17,8 +17,13 @@ on:
       - "plugins/**"
       - "tests/integration/**"
   workflow_dispatch:
+    inputs:
+      full_matrix:
+        description: "Run full ansible-core matrix"
+        type: boolean
+        default: false
   schedule:
-    - cron: "0 1 * * *"
+    - cron: "0 1 * * 0" # Weekly on Sunday at 01:00 UTC
 
 jobs:
   check-actor:
@@ -39,9 +44,8 @@ jobs:
     uses: ansible-network/github_actions/.github/workflows/safe-to-test.yml@main
 
   network-integration:
-    name: Network Integration Tests
+    name: "Integration (${{ matrix.ansible_version }})"
     runs-on: [splunk-itsi]
-    # Protect the workflow from running on PRs without approval
     environment:
       name: ${{ github.event_name == 'schedule' && 'eco-itsi-daily' || 'eco-itsi-protected' }}
     needs:
@@ -50,7 +54,21 @@ jobs:
     if: >-
       always() &&
       needs.check-actor.result == 'success' &&
-      (needs.safe-to-test.result == 'success' || needs.safe-to-test.result == 'skipped')
+      (needs.safe-to-test.result == 'success' || needs.safe-to-test.result == 'skipped') &&
+      (matrix.ansible_version == 'stable-2.21' ||
+       github.event_name == 'schedule' ||
+       inputs.full_matrix == true)
+    strategy:
+      fail-fast: false
+      max-parallel: 1
+      matrix:
+        ansible_version:
+          - stable-2.16
+          - stable-2.17
+          - stable-2.18
+          - stable-2.19
+          - stable-2.20
+          - stable-2.21
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6
@@ -58,18 +76,19 @@ jobs:
           path: ansible_collections/splunk/itsi
           ref: ${{ github.event_name == 'pull_request_target' && github.event.pull_request.head.sha || github.sha }}
 
-      - name: Install ansible-core
+      - name: Install ansible-core (${{ matrix.ansible_version }})
         working-directory: ansible_collections/splunk/itsi
         run: |
           rm -rf ~/venv-itsi
           python -m venv ~/venv-itsi
           source ~/venv-itsi/bin/activate
+          pip install "git+https://github.com/ansible/ansible.git@${{ matrix.ansible_version }}"
           pip install -r tests/integration/requirements.txt
 
       - name: Install collection dependencies
         run: |
           source ~/venv-itsi/bin/activate
-          ansible-galaxy collection install ansible.netcommon ansible.utils -p ./ansible_collections
+          ansible-galaxy collection install ansible.utils -p ./ansible_collections
 
       - name: Generate inventory file
         working-directory: ansible_collections/splunk/itsi

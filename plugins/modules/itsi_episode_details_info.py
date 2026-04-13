@@ -54,8 +54,6 @@ options:
     default: false
 notes:
   - "Connection/auth/SSL config is provided by httpapi (inventory), not by this module."
-requirements:
-  - ansible.netcommon
 """
 
 EXAMPLES = r"""

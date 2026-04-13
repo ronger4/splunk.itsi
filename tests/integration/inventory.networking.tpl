@@ -2,7 +2,7 @@
 ${ITSI_HOSTNAME}
 
 [itsi:vars]
-ansible_connection=ansible.netcommon.httpapi
+ansible_connection=httpapi
 ansible_network_os=splunk.itsi.itsi_api_client
 ansible_user=${ITSI_USERNAME}
 ansible_httpapi_pass=${ITSI_PASSWORD}

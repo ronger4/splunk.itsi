@@ -66,8 +66,6 @@ options:
 notes:
   - "Connection/auth/SSL config is provided by httpapi (inventory), not by this module."
   - This is a read-only module. It never changes remote state.
-requirements:
-  - ansible.netcommon
 """
 
 EXAMPLES = r"""

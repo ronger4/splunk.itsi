@@ -84,3 +84,44 @@ def exit_with_result(
     if extra:
         result.update(extra)
     module.exit_json(**result)
+
+
+def remove_empties(data: dict) -> dict:
+    """Return a copy of *data* with ``None`` values removed.
+
+    Args:
+        data: Dict whose ``None``-valued entries should be stripped.
+
+    Returns:
+        A new dict containing only entries where the value is not ``None``.
+    """
+    return {k: v for k, v in data.items() if v is not None}
+
+
+def dict_diff(have: dict, want: dict) -> dict:
+    """Return keys from *want* whose values differ from *have*.
+
+    Performs a recursive comparison for nested dicts.  Lists and other
+    non-dict types are compared with ``!=``.  This is intentionally safe
+    for empty lists (unlike some external implementations that crash on
+    ``val[0]`` of ``[]``).
+
+    Args:
+        have: Current state dict.
+        want: Desired state dict.
+
+    Returns:
+        Dict of ``{key: desired_value}`` for every key that differs.
+    """
+    diff: dict = {}
+    for key, desired in want.items():
+        if key not in have:
+            diff[key] = desired
+            continue
+        current = have[key]
+        if isinstance(desired, dict) and isinstance(current, dict):
+            if dict_diff(current, desired):
+                diff[key] = desired
+        elif desired != current:
+            diff[key] = desired
+    return diff

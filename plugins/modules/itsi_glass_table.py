@@ -95,8 +95,8 @@ notes:
     no update is performed and C(changed) is returned as C(false).
   - Check mode is supported. In check mode the module reports whether changes would be made
     without actually calling the API.
-  - Diff detection uses recursive comparison via C(dict_diff) from ansible.netcommon, so
-    changes nested deep inside C(definition) are properly detected.
+  - Diff detection uses recursive comparison via C(dict_diff), so changes nested deep
+    inside C(definition) are properly detected.
 """
 
 EXAMPLES = r"""
@@ -234,16 +234,17 @@ from typing import (
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
-from ansible_collections.ansible.netcommon.plugins.module_utils.network.common import (
-    utils,
-)
 from ansible_collections.splunk.itsi.plugins.module_utils.glass_table import (
     BASE_GLASS_TABLE_ENDPOINT,
     GlassTableDefinitionValidator,
     get_glass_table_by_id,
 )
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
-from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import (
+    dict_diff,
+    exit_with_result,
+    remove_empties,
+)
 
 # Fields managed by this module for diff tracking
 DIFF_FIELDS = ("title", "description", "definition", "sharing")
@@ -535,10 +536,10 @@ def _handle_update(
             have_conf[k] = current.get(k)
 
     # Remove None/empty values from desired state so we only compare real values
-    want_conf: dict = utils.remove_empties(desired)
+    want_conf: dict = remove_empties(desired)
 
     # Compute recursive diff -- detects nested changes inside definition
-    diff: dict = utils.dict_diff(have_conf, want_conf)
+    diff: dict = dict_diff(have_conf, want_conf)
 
     # Build the "after" snapshot (current state merged with desired changes)
     after_conf: dict = dict(have_conf)

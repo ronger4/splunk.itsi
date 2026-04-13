@@ -195,15 +195,16 @@ from typing import Any
 
 from ansible.module_utils.basic import AnsibleModule
 from ansible.module_utils.connection import Connection
-from ansible_collections.ansible.netcommon.plugins.module_utils.network.common import (
-    utils,
-)
 from ansible_collections.splunk.itsi.plugins.module_utils.episode_details import (
     BASE_EPISODE_ENDPOINT,
     get_episode_by_id,
 )
 from ansible_collections.splunk.itsi.plugins.module_utils.itsi_request import ItsiRequest
-from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import exit_with_result
+from ansible_collections.splunk.itsi.plugins.module_utils.splunk_utils import (
+    dict_diff,
+    exit_with_result,
+    remove_empties,
+)
 
 # Named parameters that map directly to episode fields
 NAMED_FIELD_PARAMS = ("severity", "status", "owner", "instruction")
@@ -306,8 +307,8 @@ def main() -> None:
         have_conf: dict = {k: current_episode.get(k) for k in update_data}
 
         # Remove None values from desired state so we only compare real values
-        want_conf: dict = utils.remove_empties(update_data)
-        diff: dict = utils.dict_diff(have_conf, want_conf)
+        want_conf: dict = remove_empties(update_data)
+        diff: dict = dict_diff(have_conf, want_conf)
 
         # Build the "after" snapshot (current state merged with desired changes)
         after_conf: dict = dict(have_conf)

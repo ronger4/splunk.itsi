@@ -21,7 +21,7 @@ Synopsis
 - Modules call ``conn.send_request(path, data, method="GET"``) and this plugin injects authentication and JSON headers.
 - Returns response format with status, headers, and body structure for full HTTP metadata access.
 - Automatically adds ``output_mode=json`` to GET requests for consistent JSON responses from Splunk.
-- Compatible with both core httpapi and ansible.netcommon.httpapi connections for advanced features.
+- Compatible with both core httpapi and ansible.netcommon.httpapi connections (netcommon is optional).
 
 
 
@@ -130,7 +130,7 @@ Notes
 
 .. note::
    - Basic configuration requires ``ansible_connection=httpapi`` and ``ansible_network_os=splunk.itsi.itsi_api_client``.
-   - Advanced configuration uses ``ansible_connection=ansible.netcommon.httpapi`` for proxy, SSL certs, timeouts, and connection persistence.
+   - For advanced features (proxy, SSL certs, timeouts, connection persistence) install ``ansible.netcommon`` separately and use ``ansible_connection=ansible.netcommon.httpapi``.
    - Always returns enhanced response format with structure containing status code, headers dict, and body string.
    - Authentication methods tried in priority order are Bearer token, explicit session key, auto-retrieved session key, Basic auth.
    - Auto-retrieved session keys are obtained via ``/services/auth/login`` using remote_user and password credentials.
@@ -156,7 +156,7 @@ Examples
     # ansible_httpapi_port=8089
     # ansible_httpapi_validate_certs=false
 
-    # Advanced HTTP API Configuration (ansible.netcommon.httpapi)
+    # Advanced HTTP API Configuration (requires ansible.netcommon installed separately)
     # Provides proxy support, client certificates, custom timeouts, connection persistence
     # [splunk_advanced]
     # splunk-enterprise.example.com

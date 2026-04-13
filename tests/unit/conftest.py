@@ -3,47 +3,8 @@
 # Copyright (c) 2026 Splunk ITSI Ansible Collection maintainers
 """Shared test helpers for splunk.itsi unit tests."""
 
-import sys
-from types import ModuleType
 from typing import Optional
 from unittest.mock import MagicMock
-
-# Mock ansible.netcommon for unit tests - Important to prevent import errors when running tests (SONAR CLOUD CI)
-_NETCOMMON_PREFIX = "ansible_collections.ansible.netcommon"
-_NETCOMMON_MODULES = [
-    _NETCOMMON_PREFIX,
-    f"{_NETCOMMON_PREFIX}.plugins",
-    f"{_NETCOMMON_PREFIX}.plugins.module_utils",
-    f"{_NETCOMMON_PREFIX}.plugins.module_utils.network",
-]
-
-
-class _NetcommonUtils:
-    """Minimal stand-in for ansible.netcommon network.common.utils."""
-
-    @staticmethod
-    def remove_empties(data: dict) -> dict:
-        """Return a copy of *data* with None values removed."""
-        return {k: v for k, v in data.items() if v is not None}
-
-    @staticmethod
-    def dict_diff(have: dict, want: dict) -> dict:
-        """Return keys from *want* whose values differ from *have*."""
-        return {k: v for k, v in want.items() if have.get(k) != v}
-
-
-# Build the mock module tree
-for _mod_path in _NETCOMMON_MODULES:
-    sys.modules.setdefault(_mod_path, MagicMock())
-
-_common_mod = ModuleType(
-    f"{_NETCOMMON_PREFIX}.plugins.module_utils.network.common",
-)
-_common_mod.utils = _NetcommonUtils()  # type: ignore[attr-defined]
-sys.modules.setdefault(
-    f"{_NETCOMMON_PREFIX}.plugins.module_utils.network.common",
-    _common_mod,
-)
 
 
 # ---------------------------------------------------------------------------
