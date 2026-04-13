@@ -58,7 +58,7 @@ jobs:
     runs-on: [splunk-itsi]
     needs:
       - approve
-    if: needs.approve.result == 'success'
+    if: always() && needs.approve.result == 'success'
     strategy:
       fail-fast: false
       max-parallel: 1
